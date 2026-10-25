@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>소나 기기 점검</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: one instrument column — setup, spectrum readout, band table, trial log */
+:root {
+  --bg: #f2f5f4; --panel: #ffffff; --fg: #16201d; --muted: #5a6964; --line: #d3dbd8;
+  --accent: #0a7768; --accent-weak: #d5eee8; --noise: #98a5a0;
+  --good: #1b7537; --warn: #9a5c00; --bad: #b02a20;
+  --good-bg: #e0f1e4; --warn-bg: #fbeed6; --bad-bg: #f8e0dd;
+  --font-body: "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1514; --panel: #171f1d; --fg: #e2eae7; --muted: #95a49f; --line: #2a3431;
+    --accent: #3dc3ad; --accent-weak: #11372f; --noise: #5d6b66;
+    --good: #62cf80; --warn: #eea83f; --bad: #f27a70;
+    --good-bg: #14301c; --warn-bg: #352510; --bad-bg: #3a1916;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1514; --panel: #171f1d; --fg: #e2eae7; --muted: #95a49f; --line: #2a3431;
+  --accent: #3dc3ad; --accent-weak: #11372f; --noise: #5d6b66;
+  --good: #62cf80; --warn: #eea83f; --bad: #f27a70;
+  --good-bg: #14301c; --warn-bg: #352510; --bad-bg: #3a1916;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-body);
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 1rem; margin: 0; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 500 0.72rem var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); max-width: 62ch; }
+header { display: grid; gap: 6px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.caution { border-left: 3px solid var(--warn); background: var(--warn-bg); padding: 10px 12px; border-radius: 6px; font-size: 0.9rem; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+input[type="text"], select {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 8px 10px; width: 100%;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row output { font: 500 0.85rem var(--font-mono); color: var(--fg); min-width: 3.2em; text-align: right; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button {
+  font: 500 0.92rem var(--font-body); border-radius: 6px; padding: 9px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#status { font: 0.85rem var(--font-mono); color: var(--muted); min-height: 1.4em; }
+#status.error { color: var(--bad); }
+.verdict { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+.verdict .big { font: 600 2rem/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.verdict .unit { color: var(--muted); font-size: 0.85rem; }
+.chip { display: inline-block; font: 600 0.78rem var(--font-body); padding: 3px 9px; border-radius: 999px; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.warn { color: var(--warn); background: var(--warn-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+.plot-wrap { position: relative; }
+canvas { display: block; width: 100%; height: 240px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--sw); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 500; color: var(--muted); font-size: 0.78rem; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+tr.focus td { background: var(--accent-weak); }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 0.82rem; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; min-width: 0; }
+.empty { color: var(--muted); font-size: 0.9rem; }
+details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+details[open] summary { margin-bottom: 8px; }
+ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9rem; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">0단계 · 수면 호흡수 소나 프로토타입</span>
+    <h1>소나 기기 점검</h1>
+    <p class="lede">이 폰의 스피커가 18–20kHz 근초음파를 내고, 마이크가 그 소리를 받을 수 있는지 확인합니다. 주변 잡음을 먼저 녹음한 뒤, 15→22kHz 스윕을 재생하면서 동시에 녹음해 주파수별로 비교합니다.</p>
+  </header>
+
+  <p class="caution">개·고양이는 이 소리를 들을 수 있습니다. 반려동물이 없는 방에서 시험하세요. 측정 중에는 폰을 귀에 대지 마세요.</p>
+
+  <section class="panel" aria-labelledby="setup-h">
+    <h2 id="setup-h">측정 설정</h2>
+    <div class="fields">
+      <label for="label">배치 메모
+        <input type="text" id="label" placeholder="예: 화면 위로 눕힘, 책상, 벽에서 50cm">
+      </label>
+      <label for="dur">측정 길이
+        <select id="dur">
+          <option value="3">3초</option>
+          <option value="5" selected>5초</option>
+          <option value="8">8초</option>
+        </select>
+      </label>
+      <label for="vol">스윕 음량
+        <span class="range-row"><input type="range" id="vol" min="0.05" max="1" step="0.05" value="0.3"><output id="volOut" for="vol">30%</output></span>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="run">측정 시작 (잡음 → 스윕)</button>
+      <span id="status" role="status" aria-live="polite"></span>
+    </div>
+    <details>
+      <summary>측정 방법</summary>
+      <ol class="how">
+        <li>폰 미디어 음량을 중간 이상으로 올립니다.</li>
+        <li>배치를 적고 측정을 시작합니다. 처음 몇 초는 조용히 해 주세요.</li>
+        <li>18–20kHz 신호 대 잡음비(SNR)를 확인합니다.</li>
+        <li>폰 방향(화면 위/아래, 아래쪽 스피커가 향하는 쪽)을 바꿔 다시 측정하고 기록 표에서 비교합니다.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="panel" aria-labelledby="result-h">
+    <h2 id="result-h">결과</h2>
+    <div id="resultEmpty" class="empty">아직 측정하지 않았습니다. 측정 시작을 누르면 이곳에 스펙트럼과 대역별 결과가 나옵니다.</div>
+    <div id="result" hidden>
+      <div style="display:grid;gap:14px">
+        <div class="verdict">
+          <span class="unit">18–20kHz SNR</span>
+          <span class="big" id="snrBig">–</span><span class="unit">dB</span>
+          <span class="chip" id="verdictChip">–</span>
+        </div>
+        <p id="verdictText" class="lede"></p>
+        <div class="plot-wrap"><canvas id="plot" aria-label="주파수별 신호 세기 그래프"></canvas></div>
+        <div class="legend">
+          <span style="--sw: var(--accent)">스윕 재생 중 녹음</span>
+          <span style="--sw: var(--noise)">주변 잡음</span>
+          <span style="--sw: var(--accent-weak)">목표 대역 18–20kHz</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>대역</th><th style="text-align:right">스윕 레벨 (dBFS)</th><th style="text-align:right">잡음 (dBFS)</th><th style="text-align:right">SNR (dB)</th><th>판정</th></tr></thead>
+            <tbody id="bandBody"></tbody>
+          </table>
+        </div>
+        <dl id="devInfo"></dl>
+        <div class="actions">
+          <button id="saveNoise">잡음 WAV 저장</button>
+          <button id="saveSweep">스윕 WAV 저장</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="log-h">
+    <h2 id="log-h">측정 기록</h2>
+    <div id="logEmpty" class="empty">측정할 때마다 배치별 결과가 여기에 쌓입니다. 이 브라우저에만 저장됩니다.</div>
+    <div class="table-wrap" id="logWrap" hidden>
+      <table>
+        <thead><tr><th>#</th><th>시각</th><th>배치</th><th style="text-align:right">음량</th><th style="text-align:right">18–20kHz SNR</th><th>판정</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button id="saveJson">기록 JSON 저장</button>
+      <button id="clearLog">기록 지우기</button>
+      <span id="clearConfirm" hidden>정말 지울까요? <button id="clearYes">지우기</button> <button id="clearNo">취소</button></span>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const F0 = 15000, F1 = 22000, NFFT = 4096;
+const BANDS = [[15, 16], [16, 17], [17, 18], [18, 19], [19, 20], [20, 21], [21, 22]];
+
+let ctx = null, stream = null, recording = false, chunks = [];
+let last = null;
+let trials = [];
+
+// ---------- signal helpers (pure) ----------
+function sweepSamples(sr, f0, f1, T, amp) {
+  const n = Math.round(sr * T), d = new Float32Array(n), fade = Math.round(sr * 0.02), k = (f1 - f0) / T;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr;
+    let a = amp;
+    if (i < fade) a *= 0.5 - 0.5 * Math.cos(Math.PI * i / fade);
+    else if (i > n - fade) a *= 0.5 - 0.5 * Math.cos(Math.PI * (n - i) / fade);
+    d[i] = a * Math.sin(2 * Math.PI * (f0 * t + 0.5 * k * t * t));
+  }
+  return d;
+}
+
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const a = i + j, b = a + len / 2;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+
+// Max-hold power spectrum in dBFS (0 dBFS = full-scale sine).
+function maxHoldSpectrum(x, sr) {
+  const N = NFFT, hop = N / 2, half = N / 2;
+  const win = new Float64Array(N);
+  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1));
+  const pw = new Float64Array(half), re = new Float64Array(N), im = new Float64Array(N);
+  let frames = 0;
+  for (let s = 0; s + N <= x.length; s += hop) {
+    for (let i = 0; i < N; i++) { re[i] = x[s + i] * win[i]; im[i] = 0; }
+    fft(re, im);
+    for (let k = 0; k < half; k++) { const p = re[k] * re[k] + im[k] * im[k]; if (p > pw[k]) pw[k] = p; }
+    frames++;
+  }
+  const ref = (N / 4) ** 2;
+  return { pw, ref, binHz: sr / N, frames };
+}
+
+function bandDb(spec, loHz, hiHz) {
+  const a = Math.ceil(loHz / spec.binHz), b = Math.min(spec.pw.length - 1, Math.floor(hiHz / spec.binHz));
+  if (b < a) return null;
+  let s = 0;
+  for (let k = a; k <= b; k++) s += spec.pw[k];
+  return 10 * Math.log10(s / (b - a + 1) / spec.ref + 1e-20);
+}
+
+function rate(snr) {
+  if (snr == null) return { cls: "bad", text: "측정 불가" };
+  if (snr >= 20) return { cls: "good", text: "충분" };
+  if (snr >= 10) return { cls: "warn", text: "애매" };
+  return { cls: "bad", text: "부족" };
+}
+
+function peakAbs(x) { let m = 0; for (let i = 0; i < x.length; i++) { const v = Math.abs(x[i]); if (v > m) m = v; } return m; }
+
+function analyze(noise, sweep, sr) {
+  const ns = maxHoldSpectrum(noise, sr), ss = maxHoldSpectrum(sweep, sr);
+  const nyq = sr / 2;
+  const bands = BANDS.map(([lo, hi]) => {
+    if (hi * 1000 > nyq) return { lo, hi, level: null, noise: null, snr: null };
+    const level = bandDb(ss, lo * 1000, hi * 1000), nz = bandDb(ns, lo * 1000, hi * 1000);
+    return { lo, hi, level, noise: nz, snr: level - nz };
+  });
+  const tL = bandDb(ss, 18000, 20000), tN = bandDb(ns, 18000, 20000);
+  const target = tL == null ? null : tL - tN;
+  return { sr, ns, ss, bands, target, targetLevel: tL, peakNoise: peakAbs(noise), peakSweep: peakAbs(sweep) };
+}
+
+function wavBlob(x, sr) {
+  const n = x.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, x[i])); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+window.__sonar = { sweepSamples, analyze, rate, wavBlob };
+
+// ---------- audio I/O ----------
+const workletSrc = "class R extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('rec-proc',R);";
+
+async function setup() {
+  if (ctx) { if (ctx.state === "suspended") await ctx.resume(); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("이 주소에서는 마이크를 쓸 수 없습니다. HTTPS 주소나 localhost로 열어 주세요.");
+  }
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1, sampleRate: 48000 }
+  });
+  try { ctx = new AudioContext({ sampleRate: 48000 }); } catch (e) { ctx = new AudioContext(); }
+  let mic;
+  try { mic = ctx.createMediaStreamSource(stream); }
+  catch (e) { await ctx.close(); ctx = new AudioContext(); mic = ctx.createMediaStreamSource(stream); }
+  const sink = ctx.createGain(); sink.gain.value = 0; sink.connect(ctx.destination);
+  let rec;
+  if (ctx.audioWorklet) {
+    const url = URL.createObjectURL(new Blob([workletSrc], { type: "application/javascript" }));
+    await ctx.audioWorklet.addModule(url);
+    rec = new AudioWorkletNode(ctx, "rec-proc", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: "explicit" });
+    rec.port.onmessage = (e) => { if (recording) chunks.push(e.data); };
+  } else {
+    rec = ctx.createScriptProcessor(4096, 1, 1);
+    rec.onaudioprocess = (e) => { if (recording) chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+  }
+  mic.connect(rec); rec.connect(sink);
+  await ctx.resume();
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function recordFor(sec) {
+  chunks = []; recording = true;
+  return new Promise((resolve) => setTimeout(() => {
+    recording = false;
+    const n = chunks.reduce((a, c) => a + c.length, 0), out = new Float32Array(n);
+    let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
+    resolve(out);
+  }, sec * 1000));
+}
+
+function setStatus(msg, isError) { const s = $("status"); s.textContent = msg; s.classList.toggle("error", !!isError); }
+
+async function run() {
+  const btn = $("run"); btn.disabled = true;
+  try {
+    setStatus("마이크 권한을 요청합니다…");
+    await setup();
+    const sr = ctx.sampleRate, T = Number($("dur").value), amp = Number($("vol").value);
+    const f1 = Math.min(F1, sr / 2 * 0.98);
+    setStatus(`조용히 해 주세요. 주변 잡음을 ${T}초 녹음합니다…`);
+    await wait(300);
+    const noise = await recordFor(T);
+    setStatus(`스윕 재생 중 ${F0 / 1000}→${(f1 / 1000).toFixed(1)}kHz, ${T}초…`);
+    const data = sweepSamples(sr, F0, f1, T, amp);
+    const buf = ctx.createBuffer(1, data.length, sr); buf.copyToChannel(data, 0);
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+    const recP = recordFor(T + 0.6);
+    await wait(200); src.start();
+    const sweep = await recP;
+    if (noise.length < NFFT || sweep.length < NFFT) throw new Error("녹음된 소리가 없습니다. 마이크 권한과 다른 앱의 마이크 사용 여부를 확인하세요.");
+    const res = analyze(noise, sweep, sr);
+    const track = stream.getAudioTracks()[0];
+    res.settings = track && track.getSettings ? track.getSettings() : {};
+    res.trackLabel = track ? track.label : "";
+    res.noise = noise; res.sweep = sweep;
+    res.label = $("label").value.trim() || "(메모 없음)";
+    res.vol = amp; res.dur = T; res.time = new Date();
+    last = res;
+    renderResult(res);
+    addTrial(res);
+    setStatus("측정을 마쳤습니다. 배치를 바꿔 다시 측정해 보세요.");
+  } catch (e) {
+    const msg = e && e.name === "NotAllowedError" ? "마이크 권한이 거부되었습니다. 브라우저 사이트 설정에서 마이크를 허용해 주세요." : (e && e.message) || String(e);
+    setStatus(msg, true);
+  } finally { btn.disabled = false; }
+}
+
+// ---------- rendering ----------
+const fmt = (v, d = 1) => (v == null || !isFinite(v) ? "–" : v.toFixed(d));
+
+function renderResult(r) {
+  $("resultEmpty").hidden = true; $("result").hidden = false;
+  const v = rate(r.target);
+  $("snrBig").textContent = fmt(r.target);
+  const chip = $("verdictChip"); chip.className = "chip " + v.cls; chip.textContent = v.text;
+  const notes = [];
+  if (v.cls === "good") notes.push("이 배치에서 목표 대역 신호가 잡음보다 충분히 큽니다. 1단계로 넘어갈 수 있습니다.");
+  else if (v.cls === "warn") notes.push("신호는 잡히지만 여유가 적습니다. 음량을 올리거나 폰 방향을 바꿔 다시 측정해 보세요.");
+  else notes.push("목표 대역 신호가 거의 잡히지 않습니다. 음량과 방향을 바꿔 보고, 그래도 같으면 브라우저 오디오 처리나 기기 한계일 수 있습니다.");
+  if (r.peakSweep >= 0.99) notes.push("녹음이 최대치에 닿았습니다(클리핑). 음량을 낮춰 다시 측정하세요.");
+  if (r.sr / 2 < 20000) notes.push(`샘플링 ${r.sr}Hz에서는 20kHz까지 볼 수 없습니다.`);
+  $("verdictText").textContent = notes.join(" ");
+
+  $("bandBody").innerHTML = "";
+  for (const b of r.bands) {
+    const rt = rate(b.snr), tr = document.createElement("tr");
+    if (b.lo >= 18 && b.hi <= 20) tr.className = "focus";
+    tr.innerHTML = `<td>${b.lo}–${b.hi}kHz</td><td class="num">${fmt(b.level)}</td><td class="num">${fmt(b.noise)}</td><td class="num">${fmt(b.snr)}</td><td><span class="chip ${rt.cls}">${rt.text}</span></td>`;
+    $("bandBody").appendChild(tr);
+  }
+
+  const s = r.settings || {};
+  const onOff = (x) => (x === undefined ? "알 수 없음" : x ? "켜짐" : "꺼짐");
+  const rows = [
+    ["처리 샘플링", r.sr + " Hz"],
+    ["마이크 샘플링", s.sampleRate ? s.sampleRate + " Hz" : "알 수 없음"],
+    ["에코 제거", onOff(s.echoCancellation)],
+    ["잡음 제거", onOff(s.noiseSuppression)],
+    ["자동 음량", onOff(s.autoGainControl)],
+    ["녹음 최대값", fmt(r.peakSweep, 3)],
+    ["마이크", r.trackLabel || "기본"],
+    ["브라우저", navigator.userAgent]
+  ];
+  $("devInfo").innerHTML = "";
+  for (const [k, val] of rows) {
+    const dt = document.createElement("dt"), dd = document.createElement("dd");
+    dt.textContent = k; dd.textContent = val; $("devInfo").append(dt, dd);
+  }
+  drawPlot(r);
+}
+
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function drawPlot(r) {
+  const cv = $("plot"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const padL = 40, padR = 8, padT = 8, padB = 22;
+  const fMin = 10000, fMax = Math.min(24000, r.sr / 2), dbMin = -140, dbMax = 0;
+  const x = (f) => padL + (f - fMin) / (fMax - fMin) * (W - padL - padR);
+  const y = (db) => padT + (dbMax - Math.max(dbMin, Math.min(dbMax, db))) / (dbMax - dbMin) * (H - padT - padB);
+  g.font = "11px " + cssVar("--font-mono");
+  g.fillStyle = cssVar("--accent-weak");
+  g.fillRect(x(18000), padT, x(Math.min(20000, fMax)) - x(18000), H - padT - padB);
+  g.strokeStyle = cssVar("--line"); g.lineWidth = 1; g.fillStyle = cssVar("--muted");
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for (let db = dbMin; db <= dbMax; db += 20) {
+    g.beginPath(); g.moveTo(padL, y(db) + 0.5); g.lineTo(W - padR, y(db) + 0.5); g.stroke();
+    g.fillText(String(db), padL - 6, y(db));
+  }
+  g.textAlign = "center"; g.textBaseline = "top";
+  for (let f = 10000; f <= fMax; f += 2000) g.fillText(f / 1000 + "k", x(f), H - padB + 6);
+  const line = (spec, color, width) => {
+    g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+    const cols = Math.max(1, Math.floor(W - padL - padR));
+    let started = false;
+    for (let c = 0; c <= cols; c++) {
+      const fa = fMin + (fMax - fMin) * c / cols, fb = fMin + (fMax - fMin) * (c + 1) / cols;
+      const ka = Math.floor(fa / spec.binHz), kb = Math.max(ka, Math.floor(fb / spec.binHz));
+      let m = 0; for (let k = ka; k <= kb && k < spec.pw.length; k++) if (spec.pw[k] > m) m = spec.pw[k];
+      const db = 10 * Math.log10(m / spec.ref + 1e-20), px = padL + c, py = y(db);
+      if (!started) { g.moveTo(px, py); started = true; } else g.lineTo(px, py);
+    }
+    g.stroke();
+  };
+  line(r.ns, cssVar("--noise"), 1.2);
+  line(r.ss, cssVar("--accent"), 1.6);
+  g.save(); g.translate(10, padT + (H - padT - padB) / 2); g.rotate(-Math.PI / 2);
+  g.textAlign = "center"; g.textBaseline = "top"; g.fillStyle = cssVar("--muted"); g.fillText("dBFS", 0, -6); g.restore();
+}
+
+// ---------- trial log ----------
+function loadTrials() { try { trials = JSON.parse(localStorage.getItem("sonarCheckTrials") || "[]"); } catch (e) { trials = []; } }
+function saveTrials() { try { localStorage.setItem("sonarCheckTrials", JSON.stringify(trials)); } catch (e) {} }
+
+function addTrial(r) {
+  trials.push({
+    no: trials.length + 1, time: r.time.toISOString(), label: r.label, volume: r.vol, durationSec: r.dur,
+    sampleRate: r.sr, micSettings: r.settings, userAgent: navigator.userAgent,
+    snr18to20dB: r.target == null ? null : +r.target.toFixed(2),
+    level18to20dBFS: r.targetLevel == null ? null : +r.targetLevel.toFixed(2),
+    peakSweep: +r.peakSweep.toFixed(4),
+    bands: r.bands.map((b) => ({ kHz: `${b.lo}-${b.hi}`, levelDbfs: b.level == null ? null : +b.level.toFixed(2), noiseDbfs: b.noise == null ? null : +b.noise.toFixed(2), snrDb: b.snr == null ? null : +b.snr.toFixed(2) }))
+  });
+  saveTrials(); renderLog();
+}
+
+function renderLog() {
+  const body = $("logBody"); body.innerHTML = "";
+  $("logEmpty").hidden = trials.length > 0; $("logWrap").hidden = trials.length === 0;
+  for (const t of trials.slice().reverse()) {
+    const rt = rate(t.snr18to20dB), tr = document.createElement("tr");
+    const tm = new Date(t.time);
+    const cells = [String(t.no), tm.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }), t.label, Math.round(t.volume * 100) + "%", fmt(t.snr18to20dB)];
+    cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i === 3 || i === 4) td.className = "num"; tr.appendChild(td); });
+    const td = document.createElement("td"); td.innerHTML = `<span class="chip ${rt.cls}">${rt.text}</span>`; tr.appendChild(td);
+    body.appendChild(tr);
+  }
+}
+
+function download(blob, name) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const stamp = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+
+// ---------- wiring ----------
+$("vol").addEventListener("input", () => { $("volOut").textContent = Math.round($("vol").value * 100) + "%"; });
+$("run").addEventListener("click", run);
+$("saveNoise").addEventListener("click", () => { if (last) download(wavBlob(last.noise, last.sr), `noise_${stamp()}.wav`); });
+$("saveSweep").addEventListener("click", () => { if (last) download(wavBlob(last.sweep, last.sr), `sweep_${stamp()}.wav`); });
+$("saveJson").addEventListener("click", () => { download(new Blob([JSON.stringify(trials, null, 2)], { type: "application/json" }), `sonar_check_${stamp()}.json`); });
+$("clearLog").addEventListener("click", () => { $("clearConfirm").hidden = false; });
+$("clearNo").addEventListener("click", () => { $("clearConfirm").hidden = true; });
+$("clearYes").addEventListener("click", () => { trials = []; saveTrials(); renderLog(); $("clearConfirm").hidden = true; });
+window.addEventListener("resize", () => { if (last) drawPlot(last); });
+if (!window.isSecureContext) setStatus("이 주소에서는 마이크를 쓸 수 없습니다. HTTPS 주소나 localhost로 열어 주세요.", true);
+loadTrials(); renderLog();
+</script>
+</body>
+</html>
