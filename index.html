@@ -181,6 +181,8 @@ ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9
       </table>
     </div>
     <div class="actions">
+      <button id="shareLog">기록 공유</button>
+      <button id="copyLog">기록 복사</button>
       <button id="saveJson">기록 JSON 저장</button>
       <button id="clearLog">기록 지우기</button>
       <span id="clearConfirm" hidden>정말 지울까요? <button id="clearYes">지우기</button> <button id="clearNo">취소</button></span>
@@ -461,6 +463,46 @@ function drawPlot(r) {
 function loadTrials() { try { trials = JSON.parse(localStorage.getItem("sonarCheckTrials") || "[]"); } catch (e) { trials = []; } }
 function saveTrials() { try { localStorage.setItem("sonarCheckTrials", JSON.stringify(trials)); } catch (e) {} }
 
+function shareText() {
+  const lines = ["소나 기기 점검 기록", navigator.userAgent, ""];
+  for (const t of trials) {
+    const tm = new Date(t.time).toLocaleString("ko-KR");
+    lines.push(`#${t.no} ${tm} | ${t.label} | 음량 ${Math.round(t.volume * 100)}% | 18–20kHz SNR ${fmt(t.snr18to20dB)} dB (${rate(t.snr18to20dB).text})`);
+    lines.push("  대역별 SNR: " + t.bands.map((b) => `${b.kHz} ${fmt(b.snrDb)}`).join(", "));
+  }
+  return lines.join("\n");
+}
+
+async function shareLog() {
+  if (!trials.length) { setStatus("공유할 기록이 없습니다. 먼저 측정해 주세요."); return; }
+  const text = shareText();
+  // Android share sheets accept text/plain files; application/json is often rejected.
+  const file = new File([JSON.stringify(trials, null, 2)], `sonar_check_${stamp()}.txt`, { type: "text/plain" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: "소나 기기 점검 기록", text, files: [file] });
+    else if (navigator.share) await navigator.share({ title: "소나 기기 점검 기록", text });
+    else await copyLog();
+  } catch (e) {
+    if (e && e.name === "AbortError") return;
+    await copyLog();
+  }
+}
+
+// Summary first so a pasted message is readable; full JSON after it for analysis.
+async function copyLog() {
+  if (!trials.length) { setStatus("복사할 기록이 없습니다. 먼저 측정해 주세요."); return; }
+  const text = shareText() + "\n\n" + JSON.stringify(trials);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove();
+    if (!ok) { setStatus("복사에 실패했습니다. 기록 공유 버튼을 써 주세요.", true); return; }
+  }
+  setStatus("기록을 클립보드에 복사했습니다. 메신저, 메모, Claude 대화창에 붙여 넣으세요.");
+}
+
 function addTrial(r) {
   trials.push({
     no: trials.length + 1, time: r.time.toISOString(), label: r.label, volume: r.vol, durationSec: r.dur,
@@ -499,6 +541,8 @@ $("run").addEventListener("click", run);
 $("saveNoise").addEventListener("click", () => { if (last) download(wavBlob(last.noise, last.sr), `noise_${stamp()}.wav`); });
 $("saveSweep").addEventListener("click", () => { if (last) download(wavBlob(last.sweep, last.sr), `sweep_${stamp()}.wav`); });
 $("saveJson").addEventListener("click", () => { download(new Blob([JSON.stringify(trials, null, 2)], { type: "application/json" }), `sonar_check_${stamp()}.json`); });
+$("shareLog").addEventListener("click", shareLog);
+$("copyLog").addEventListener("click", copyLog);
 $("clearLog").addEventListener("click", () => { $("clearConfirm").hidden = false; });
 $("clearNo").addEventListener("click", () => { $("clearConfirm").hidden = true; });
 $("clearYes").addEventListener("click", () => { trials = []; saveTrials(); renderLog(); $("clearConfirm").hidden = true; });
