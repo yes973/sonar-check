@@ -105,13 +105,41 @@ ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9
     <p class="lede">18→20kHz chirp를 반복 재생하면서 반사음을 녹음합니다. 녹음 중 화면에 표시되는 1분 동안 숨 쉰 횟수를 세어 적으면, PC 분석 결과와 비교할 정답값이 됩니다.</p>
   </header>
 
-  <p class="caution">개·고양이는 이 소리를 들을 수 있습니다. 사람 시험은 반려동물이 없는 방에서 하세요. 녹음하는 동안 화면을 켜 두고, 다른 앱으로 넘어가지 마세요.</p>
+  <p class="caution" data-mode="human">개·고양이는 이 소리를 들을 수 있습니다. 사람 시험은 반려동물이 없는 방에서 하세요. 녹음하는 동안 화면을 켜 두고, 다른 앱으로 넘어가지 마세요.</p>
+  <p class="caution" data-mode="pet">개·고양이는 이 소리를 들을 수 있습니다. chirp 음량 10%에서 시작하고, 귀 움직임·고개 들기·깨어남·자리 피함이 보이면 바로 중지하세요. 연속 녹음은 5분까지, 다음 녹음까지 10분 이상 쉬세요.</p>
 
   <section class="panel" aria-labelledby="setup-h">
     <h2 id="setup-h">녹음 설정</h2>
     <div class="fields">
+      <label for="mode">시험 대상
+        <select id="mode">
+          <option value="human" selected>사람 (1단계)</option>
+          <option value="pet">반려동물 (2단계)</option>
+        </select>
+      </label>
       <label for="label">메모
         <input type="text" id="label" placeholder="예: 본인, 누워서, 폰은 가슴 옆 바닥">
+      </label>
+      <label for="species" data-mode="pet">동물
+        <select id="species">
+          <option value="dog">개</option>
+          <option value="cat">고양이</option>
+        </select>
+      </label>
+      <label for="posture" data-mode="pet">자세
+        <select id="posture">
+          <option value="side">옆으로 누움</option>
+          <option value="sternal">엎드림</option>
+          <option value="curled">웅크림</option>
+          <option value="other">기타</option>
+        </select>
+      </label>
+      <label for="phonePos" data-mode="pet">폰 위치
+        <select id="phonePos">
+          <option value="flank">옆구리 쪽</option>
+          <option value="head">머리 쪽</option>
+          <option value="back">등 쪽</option>
+        </select>
       </label>
       <label for="dist">가슴까지 거리 (cm)
         <input type="number" id="dist" inputmode="numeric" min="10" max="300" step="5" value="50">
@@ -126,7 +154,7 @@ ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9
           <option value="310">5분 10초</option>
         </select>
       </label>
-      <label for="pace">호흡 안내
+      <label for="pace" data-mode="human">호흡 안내
         <select id="pace">
           <option value="0" selected>끔 (평소대로 숨쉬기)</option>
           <option value="10">10회/분</option>
@@ -143,7 +171,17 @@ ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9
       <button id="stop" hidden>중지</button>
       <span id="status" role="status" aria-live="polite"></span>
     </div>
-    <details>
+    <details data-mode="pet">
+      <summary>반려동물 시험 방법</summary>
+      <ol class="how">
+        <li>반려동물이 깊이 잠든 뒤 시작합니다. 폰을 바닥에 두고 아래쪽 스피커가 몸통을 향하게 합니다.</li>
+        <li>다른 폰으로 영상을 찍습니다. 반려동물의 몸통과 <strong>이 폰 화면의 타이머가 함께</strong> 보이게 찍어야 나중에 시간을 맞출 수 있습니다.</li>
+        <li>녹음 시작을 누르고 물러납니다. 귀 움직임, 고개 들기, 깨어남, 자리 피함이 보이면 바로 중지합니다.</li>
+        <li>녹음이 끝나면 동물 반응을 고르고 WAV를 공유합니다. 영상도 PC로 옮깁니다.</li>
+        <li>PC에서 <a href="../count/" style="color:var(--accent)">영상 호흡 세기</a> 페이지로 영상을 보며 숨을 셉니다.</li>
+      </ol>
+    </details>
+    <details data-mode="human">
       <summary>사람 호흡 시험 방법</summary>
       <ol class="how">
         <li>Chrome으로 엽니다. 폰 미디어 음량을 정해 두고, 그 값을 적습니다. chirp 음량은 10%로 둡니다.</li>
@@ -172,8 +210,18 @@ ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9
     <div class="actions"><span class="chip" id="checkChip">–</span><span id="checkText" class="lede"></span></div>
     <dl id="recInfo"></dl>
     <div class="fields">
-      <label for="count">센 호흡 수 (1분)
+      <label for="count" data-mode="human">센 호흡 수 (1분)
         <input type="number" id="count" inputmode="numeric" min="0" max="120" placeholder="예: 14">
+      </label>
+      <label for="reaction" data-mode="pet">동물 반응
+        <select id="reaction">
+          <option value="none">반응 없음</option>
+          <option value="ear">귀 움직임</option>
+          <option value="head">고개 들기</option>
+          <option value="woke">깨어남</option>
+          <option value="left">자리 피함</option>
+          <option value="unknown">못 봤음</option>
+        </select>
       </label>
     </div>
     <div class="actions">
@@ -192,6 +240,11 @@ const F0 = 18000, F1 = 20000, CHIRP_LEN = 512, FADE_LEN = 24;
 const COUNT_START = 10, COUNT_LEN = 60;   // seconds: settle, then the 1-minute counting window
 const HP_HZ = 16000;                      // speech removal before saving
 const HP_Q_DB = -3.01;                    // Web Audio reads highpass Q in dB; -3.01 dB = Butterworth (no peak)
+// Pet recordings stay at 5 min or less: the plan's 5-min-on / 10-min-rest pattern, and phone memory for raw float audio.
+const DURATIONS = {
+  human: [[80, "80초 (1분 세기)"], [190, "3분 10초"], [310, "5분 10초"]],
+  pet: [[180, "3분"], [300, "5분"]]
+};
 
 let ctx = null, stream = null, recording = false, chunks = [];
 let src = null, wakeLock = null, timerId = null, raf = 0, stopFlag = null;
@@ -277,19 +330,36 @@ async function setup() {
 
 function setStatus(msg, isError) { const s = $("status"); s.textContent = msg; s.classList.toggle("error", !!isError); }
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const mmssT = (s) => `${mmss(s)}.${Math.floor((s % 1) * 10)}`;
+const mode = () => $("mode").value;
+
+function applyMode() {
+  const m = mode();
+  document.querySelectorAll("[data-mode]").forEach((el) => { el.hidden = el.dataset.mode !== m; });
+  const dur = $("dur"); dur.innerHTML = "";
+  for (const [v, t] of DURATIONS[m]) dur.add(new Option(t, String(v)));
+  $("label").placeholder = m === "pet" ? "예: 초코, 거실 방석, 털 짧음" : "예: 본인, 누워서, 폰은 가슴 옆 바닥";
+}
 
 // ---------- live view ----------
-function startLive(total, pace) {
+function startLive(total, pace, m) {
   $("livePanel").hidden = false;
+  const pet = m === "pet";
+  $("barWin").hidden = pet;
   $("barWin").style.left = (COUNT_START / total * 100) + "%";
   $("barWin").style.width = (COUNT_LEN / total * 100) + "%";
   $("guide").hidden = !pace;
+  $("guideLabel").textContent = "";
+  // The recording's own clock: audio t=0 is when chunks start arriving, which is within a few ms of this.
   const t0 = performance.now();
   const tick = () => {
     const t = (performance.now() - t0) / 1000;
     $("barFill").style.width = Math.min(100, t / total * 100) + "%";
     const ph = $("phase");
-    if (t < COUNT_START) {
+    if (pet) {
+      ph.textContent = "녹음 중 · 영상에 이 타이머가 보이게 두세요"; ph.className = "phase count";
+      $("timer").textContent = mmssT(Math.min(t, total)); $("timerSub").textContent = `남은 시간 ${mmss(Math.max(0, total - t))}`;
+    } else if (t < COUNT_START) {
       ph.textContent = "준비 · 움직이지 마세요"; ph.className = "phase";
       $("timer").textContent = String(Math.ceil(COUNT_START - t)); $("timerSub").textContent = "곧 숨 세기를 시작합니다";
     } else if (t < COUNT_START + COUNT_LEN) {
@@ -320,7 +390,8 @@ async function start() {
   try {
     setStatus("마이크 권한을 요청합니다…");
     await setup();
-    const sr = ctx.sampleRate, total = Number($("dur").value), pace = Number($("pace").value), amp = Number($("vol").value);
+    const m = mode(), pet = m === "pet";
+    const sr = ctx.sampleRate, total = Number($("dur").value), pace = pet ? 0 : Number($("pace").value), amp = Number($("vol").value);
     if (sr / 2 <= F1) throw new Error(`샘플링 ${sr}Hz에서는 20kHz를 낼 수 없습니다.`);
     try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { wakeLock = null; }
 
@@ -331,7 +402,7 @@ async function start() {
     chunks = []; recording = true;
     const startedAt = new Date();
     src.start();
-    startLive(total, pace);
+    startLive(total, pace, m);
     $("stop").hidden = false;
     setStatus("녹음 중입니다. 폰에서 손을 떼 주세요.");
     const stopped = await new Promise((resolve) => {
@@ -360,15 +431,17 @@ async function start() {
         chirp: { f0: F0, f1: F1, length: CHIRP_LEN, fade: FADE_LEN, amp, loop: true },
         highpassHz: HP_HZ, highpassOrder: 8, highpassQdB: HP_Q_DB,
         durationSec: +(n / sr).toFixed(3), plannedSec: total, stoppedEarly: stopped,
-        countWindowSec: [COUNT_START, COUNT_START + COUNT_LEN], pacedBpm: pace || null, countedBreaths: null,
+        mode: m, countWindowSec: pet ? null : [COUNT_START, COUNT_START + COUNT_LEN], pacedBpm: pace || null, countedBreaths: null,
         label: $("label").value.trim(), distanceCm: Number($("dist").value) || null, mediaVolume: $("mediaVol").value.trim(),
+        ...(pet ? { species: $("species").value, posture: $("posture").value, phonePosition: $("phonePos").value, reaction: null } : {}),
         rawPeak: +lvRaw.peak.toFixed(4), bandRmsDbfs: +lvHp.rms.toFixed(1),
         micSettings: track && track.getSettings ? track.getSettings() : {}, micLabel: track ? track.label : "",
         userAgent: navigator.userAgent
       }
     };
     showSave(rec, stopped);
-    setStatus(stopped ? "중지했습니다. 녹음된 부분까지 저장할 수 있습니다." : "녹음을 마쳤습니다. 센 호흡 수를 적고 저장하세요.");
+    setStatus(stopped ? "중지했습니다. 녹음된 부분까지 저장할 수 있습니다."
+      : pet ? "녹음을 마쳤습니다. 동물 반응을 고르고 저장하세요." : "녹음을 마쳤습니다. 센 호흡 수를 적고 저장하세요.");
   } catch (e) {
     recording = false; stopLive(); $("stop").hidden = true;
     if (src) { try { src.stop(); } catch (x) {} src = null; }
@@ -383,7 +456,7 @@ function showSave(r, stopped) {
   let cls = "good", text = "정상", note = "16kHz 이상 대역에 chirp 신호가 녹음되었습니다.";
   if (m.rawPeak >= 0.99) { cls = "warn"; text = "클리핑"; note = "녹음이 최대치에 닿았습니다. chirp 음량이나 미디어 음량을 낮춰 다시 녹음하세요."; }
   else if (m.bandRmsDbfs < -80) { cls = "bad"; text = "신호 없음"; note = "chirp가 거의 녹음되지 않았습니다. 미디어 음량을 확인하고 다시 녹음하세요."; }
-  if (stopped && m.durationSec < m.countWindowSec[1]) { cls = cls === "good" ? "warn" : cls; note += " 1분 세기 구간이 끝나기 전에 중지했습니다."; }
+  if (stopped && m.countWindowSec && m.durationSec < m.countWindowSec[1]) { cls = cls === "good" ? "warn" : cls; note += " 1분 세기 구간이 끝나기 전에 중지했습니다."; }
   chip.className = "chip " + cls; chip.textContent = text; $("checkText").textContent = note;
   const rows = [
     ["길이", m.durationSec.toFixed(1) + " 초"],
@@ -403,9 +476,11 @@ function showSave(r, stopped) {
 const stamp = (d) => { const p = (x) => String(x).padStart(2, "0"); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
 
 function buildFile() {
-  const c = $("count").value.trim();
-  rec.meta.countedBreaths = c === "" ? null : Number(c);
-  const name = `srr_${stamp(new Date(rec.meta.startedAt))}${rec.meta.pacedBpm ? "_pace" + rec.meta.pacedBpm : ""}.wav`;
+  const pet = rec.meta.mode === "pet";
+  if (pet) rec.meta.reaction = $("reaction").value;
+  else { const c = $("count").value.trim(); rec.meta.countedBreaths = c === "" ? null : Number(c); }
+  const tag = pet ? `_${rec.meta.species}` : rec.meta.pacedBpm ? "_pace" + rec.meta.pacedBpm : "";
+  const name = `srr_${stamp(new Date(rec.meta.startedAt))}${tag}.wav`;
   return new File([wavWithMeta(rec.samples, rec.sr, rec.meta)], name, { type: "audio/wav" });
 }
 
@@ -432,6 +507,7 @@ async function share() {
 // ---------- wiring ----------
 $("vol").addEventListener("input", () => { $("volOut").textContent = Math.round($("vol").value * 100) + "%"; });
 $("start").addEventListener("click", start);
+$("mode").addEventListener("change", applyMode);
 $("stop").addEventListener("click", () => { if (stopFlag) stopFlag(); });
 $("share").addEventListener("click", share);
 $("download").addEventListener("click", () => { if (rec) { const f = buildFile(); download(f); setStatus("다운로드했습니다: " + f.name); } });
@@ -440,6 +516,8 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("beforeunload", (e) => { if (recording || rec) { e.preventDefault(); e.returnValue = ""; } });
 if (!window.isSecureContext) setStatus("이 주소에서는 마이크를 쓸 수 없습니다. HTTPS 주소나 localhost로 열어 주세요.", true);
+if (new URLSearchParams(location.search).get("mode") === "pet") $("mode").value = "pet";
+applyMode();
 </script>
 </body>
 </html>

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>영상 호흡 세기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: files → video with sync + tap controls → per-minute table → export */
+:root {
+  --bg: #f2f5f4; --panel: #ffffff; --fg: #16201d; --muted: #5a6964; --line: #d3dbd8;
+  --accent: #0a7768; --accent-weak: #d5eee8;
+  --good: #1b7537; --warn: #9a5c00; --bad: #b02a20;
+  --good-bg: #e0f1e4; --warn-bg: #fbeed6; --bad-bg: #f8e0dd;
+  --font-body: "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1514; --panel: #171f1d; --fg: #e2eae7; --muted: #95a49f; --line: #2a3431;
+    --accent: #3dc3ad; --accent-weak: #11372f;
+    --good: #62cf80; --warn: #eea83f; --bad: #f27a70;
+    --good-bg: #14301c; --warn-bg: #352510; --bad-bg: #3a1916;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1514; --panel: #171f1d; --fg: #e2eae7; --muted: #95a49f; --line: #2a3431;
+  --accent: #3dc3ad; --accent-weak: #11372f;
+  --good: #62cf80; --warn: #eea83f; --bad: #f27a70;
+  --good-bg: #14301c; --warn-bg: #352510; --bad-bg: #3a1916;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-body);
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 960px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 1rem; margin: 0; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 500 0.72rem var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); max-width: 70ch; }
+header { display: grid; gap: 6px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+input[type="text"], input[type="file"], select {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 8px 10px; width: 100%; min-width: 0;
+}
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button {
+  font: 500 0.92rem var(--font-body); border-radius: 6px; padding: 9px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+kbd { font: 500 0.75rem var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--bg); }
+#status { font: 0.85rem var(--font-mono); color: var(--muted); min-height: 1.4em; }
+#status.error { color: var(--bad); }
+video { width: 100%; max-height: 62vh; background: #000; border-radius: 8px; display: block; }
+.readout { display: flex; flex-wrap: wrap; gap: 8px 22px; font: 0.85rem var(--font-mono); color: var(--muted); }
+.readout b { color: var(--fg); font-weight: 500; }
+.tap { font-size: 1.15rem; padding: 16px 28px; }
+.chip { display: inline-block; font: 600 0.78rem var(--font-body); padding: 3px 9px; border-radius: 999px; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.warn { color: var(--warn); background: var(--warn-bg); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 500; color: var(--muted); font-size: 0.78rem; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.empty { color: var(--muted); font-size: 0.9rem; }
+ol.how { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.9rem; }
+details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+details[open] summary { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">2단계 · 정답값 만들기</span>
+    <h1>영상 호흡 세기</h1>
+    <p class="lede">반려동물 영상을 보면서 숨 쉴 때마다 스페이스바를 누르면, 소나 녹음과 같은 시간축의 호흡 기록(CSV)을 만듭니다. 영상은 이 PC 브라우저 안에서만 열리고 어디에도 올라가지 않습니다.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="files-h">
+    <h2 id="files-h">파일</h2>
+    <div class="fields">
+      <label for="video">영상 파일
+        <input type="file" id="video" accept="video/*">
+      </label>
+      <label for="wav">소나 녹음 WAV (이름과 길이만 읽음)
+        <input type="file" id="wav" accept=".wav,audio/wav">
+      </label>
+      <label for="pass">세기 회차
+        <select id="pass"><option value="1">1차</option><option value="2">2차</option></select>
+      </label>
+    </div>
+    <details>
+      <summary>세는 방법</summary>
+      <ol class="how">
+        <li>영상과, 같은 시각에 녹음한 WAV를 고릅니다.</li>
+        <li><b>시간 맞추기:</b> 영상을 멈추고 화면에 찍힌 녹음 폰 타이머(예: 0:12.3)가 읽히는 장면을 찾습니다. 그 값을 입력하고 "이 장면에 맞추기"를 누릅니다.</li>
+        <li>처음으로 돌아가 재생하면서 <b>숨을 들이쉬기 시작할 때마다</b> <kbd>Space</kbd>를 누릅니다. 잘못 눌렀으면 <kbd>Backspace</kbd>로 지웁니다.</li>
+        <li>몸을 크게 움직이거나 깨어난 구간은 "움직임 시작/끝"으로 표시해 둡니다. 그 분은 평가에서 빠집니다.</li>
+        <li>끝까지 센 뒤 CSV를 저장해 <code>sonar-analysis\data</code> 폴더에 WAV와 함께 넣습니다. 가능하면 다른 날 2차로 한 번 더 셉니다.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="panel" aria-labelledby="play-h">
+    <h2 id="play-h">영상</h2>
+    <video id="player" controls playsinline preload="metadata"></video>
+    <div class="readout">
+      <span>영상 <b id="vt">–</b></span>
+      <span>녹음 시간 <b id="rt">시간 맞추기 전</b></span>
+      <span>숨 <b id="nTaps">0</b>회</span>
+      <span>최근 30초 <b id="recent">–</b> 회/분</span>
+    </div>
+    <div class="actions">
+      <label for="speed" style="grid-auto-flow:column;align-items:center;gap:8px">재생 속도
+        <select id="speed" style="width:auto"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option></select>
+      </label>
+      <button class="primary tap" id="tap">숨 <kbd>Space</kbd></button>
+      <button id="undo">되돌리기 <kbd>⌫</kbd></button>
+      <button id="moveToggle">움직임 시작 <kbd>M</kbd></button>
+    </div>
+    <div class="fields">
+      <label for="syncVal">영상에 보이는 녹음 타이머
+        <input type="text" id="syncVal" inputmode="decimal" placeholder="예: 0:12.3">
+      </label>
+    </div>
+    <div class="actions">
+      <button id="sync">이 장면에 맞추기</button>
+      <span id="syncInfo" class="lede"></span>
+    </div>
+    <span id="status" role="status" aria-live="polite"></span>
+  </section>
+
+  <section class="panel" aria-labelledby="min-h">
+    <h2 id="min-h">분 단위 결과</h2>
+    <div id="minEmpty" class="empty">시간을 맞추고 숨을 세면 녹음 시간 기준 1분마다 호흡수가 나옵니다.</div>
+    <div class="table-wrap" id="minWrap" hidden>
+      <table>
+        <thead><tr><th>구간 (녹음 시간)</th><th style="text-align:right">숨 횟수</th><th style="text-align:right">간격 기준 회/분</th><th>상태</th></tr></thead>
+        <tbody id="minBody"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="primary" id="save">CSV 저장</button>
+      <button id="clear">기록 지우기</button>
+      <span id="clearConfirm" hidden>정말 지울까요? <button id="clearYes">지우기</button> <button id="clearNo">취소</button></span>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const v = $("player");
+// taps: video-time seconds; moves: [start, end] video-time pairs (end null while open). Offset maps video → recording time.
+let state = { videoName: "", wavName: "", wavSec: null, offset: null, taps: [], moves: [] };
+
+const fmt = (s) => { const neg = s < 0; s = Math.abs(s); return `${neg ? "-" : ""}${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`; };
+function parseTimer(txt) {
+  const m = String(txt).trim().match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+  return m ? Number(m[1] || 0) * 60 + Number(m[2]) : null;
+}
+const key = () => `srrCount:${state.videoName}:${$("pass").value}`;
+function persist() { try { if (state.videoName) localStorage.setItem(key(), JSON.stringify(state)); } catch (e) {} }
+function restore() {
+  try {
+    const s = JSON.parse(localStorage.getItem(key()) || "null");
+    if (s) { state = { ...state, offset: s.offset, taps: s.taps || [], moves: s.moves || [], wavName: state.wavName || s.wavName, wavSec: state.wavSec || s.wavSec }; setStatus(`이전에 센 기록 ${state.taps.length}회를 불러왔습니다.`); }
+  } catch (e) {}
+}
+function setStatus(msg, isError) { const s = $("status"); s.textContent = msg; s.classList.toggle("error", !!isError); }
+
+// Reads only the RIFF chunk headers + "smta" metadata, not the audio.
+async function readWavMeta(file) {
+  const head = new DataView(await file.slice(0, 65536).arrayBuffer());
+  let pos = 12, sr = null, meta = null, dataLen = null;
+  while (pos + 8 <= head.byteLength) {
+    const id = String.fromCharCode(head.getUint8(pos), head.getUint8(pos + 1), head.getUint8(pos + 2), head.getUint8(pos + 3));
+    const size = head.getUint32(pos + 4, true);
+    if (id === "fmt ") sr = head.getUint32(pos + 12, true);
+    else if (id === "smta" && pos + 8 + size <= head.byteLength) meta = JSON.parse(new TextDecoder().decode(new Uint8Array(head.buffer, pos + 8, size)));
+    else if (id === "data") { dataLen = size; break; }
+    pos += 8 + size + (size & 1);
+  }
+  return { sec: sr && dataLen ? dataLen / 2 / sr : meta && meta.durationSec, meta };
+}
+
+function inMove(t) { return state.moves.some(([a, b]) => t >= a && t <= (b == null ? Infinity : b)); }
+
+function minutes() {
+  if (state.offset == null) return [];
+  const rec = state.taps.map((t) => t + state.offset).sort((a, b) => a - b);
+  const end = state.wavSec || (v.duration ? v.duration + state.offset : rec[rec.length - 1] || 0);
+  const out = [];
+  for (let s = 0; s + 60 <= end + 1e-6; s += 60) {
+    const inWin = rec.filter((t) => t >= s && t < s + 60);
+    const moved = state.moves.some(([a, b]) => a + state.offset < s + 60 && (b == null ? Infinity : b + state.offset) > s);
+    const rate = inWin.length >= 3 ? (inWin.length - 1) / (inWin[inWin.length - 1] - inWin[0]) * 60 : null;
+    out.push({ s, n: inWin.length, rate, moved });
+  }
+  return out;
+}
+
+function render() {
+  $("nTaps").textContent = state.taps.length;
+  const now = v.currentTime || 0;
+  $("vt").textContent = fmt(now);
+  $("rt").textContent = state.offset == null ? "시간 맞추기 전" : fmt(now + state.offset);
+  const recent = state.taps.filter((t) => t > now - 30 && t <= now).sort((a, b) => a - b);
+  $("recent").textContent = recent.length >= 3 ? ((recent.length - 1) / (recent[recent.length - 1] - recent[0]) * 60).toFixed(1) : "–";
+  const open = state.moves.length && state.moves[state.moves.length - 1][1] == null;
+  $("moveToggle").innerHTML = (open ? "움직임 끝" : "움직임 시작") + " <kbd>M</kbd>";
+  $("syncInfo").textContent = state.offset == null ? "" : `녹음 시간 = 영상 시간 ${state.offset >= 0 ? "+" : "−"} ${Math.abs(state.offset).toFixed(2)}초`;
+
+  const rows = minutes();
+  $("minEmpty").hidden = rows.length > 0; $("minWrap").hidden = rows.length === 0;
+  const body = $("minBody"); body.innerHTML = "";
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const cells = [`${fmt(r.s)} – ${fmt(r.s + 60)}`, String(r.n), r.rate == null ? "–" : r.rate.toFixed(1)];
+    cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i) td.className = "num"; tr.appendChild(td); });
+    const td = document.createElement("td");
+    td.innerHTML = r.moved ? '<span class="chip warn">움직임 · 제외</span>' : r.n >= 3 ? '<span class="chip good">사용</span>' : "–";
+    tr.appendChild(td); body.appendChild(tr);
+  }
+}
+
+function tap() {
+  if (!v.src) { setStatus("먼저 영상 파일을 고르세요.", true); return; }
+  state.taps.push(+v.currentTime.toFixed(3)); persist(); render();
+}
+function undo() { state.taps.pop(); persist(); render(); }
+function toggleMove() {
+  if (!v.src) return;
+  const last = state.moves[state.moves.length - 1], t = +v.currentTime.toFixed(3);
+  if (last && last[1] == null) last[1] = Math.max(t, last[0]); else state.moves.push([t, null]);
+  persist(); render();
+}
+
+function csv() {
+  const lines = [
+    `# video=${state.videoName}`, `# wav=${state.wavName}`, `# pass=${$("pass").value}`,
+    `# offset_sec=${state.offset == null ? "" : state.offset.toFixed(3)}`, `# saved=${new Date().toISOString()}`,
+    "kind,rec_time_sec,video_time_sec"
+  ];
+  for (const t of [...state.taps].sort((a, b) => a - b)) lines.push(`breath,${(t + state.offset).toFixed(3)},${t.toFixed(3)}`);
+  for (const [a, b] of state.moves) {
+    lines.push(`move_start,${(a + state.offset).toFixed(3)},${a.toFixed(3)}`);
+    if (b != null) lines.push(`move_end,${(b + state.offset).toFixed(3)},${b.toFixed(3)}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+function save() {
+  if (state.offset == null) { setStatus("먼저 시간을 맞춰 주세요. 그래야 소나 녹음과 비교할 수 있습니다.", true); return; }
+  if (!state.taps.length) { setStatus("센 숨이 없습니다.", true); return; }
+  const stem = (state.wavName || state.videoName || "recording").replace(/\.[^.]+$/, "");
+  const name = `${stem}_counts_pass${$("pass").value}.csv`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv()], { type: "text/csv" })); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  setStatus(`저장했습니다: ${name}. sonar-analysis\\data 폴더에 WAV와 같이 넣어 주세요.`);
+}
+
+$("video").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  if (v.src) URL.revokeObjectURL(v.src);
+  v.src = URL.createObjectURL(f); state = { ...state, videoName: f.name, offset: null, taps: [], moves: [] };
+  restore(); render();
+});
+$("wav").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const m = await readWavMeta(f); state.wavName = f.name; state.wavSec = m.sec; persist(); render(); setStatus(`녹음 ${f.name}, 길이 ${fmt(m.sec)}`); }
+  catch (err) { setStatus("WAV를 읽지 못했습니다: " + err.message, true); }
+});
+$("pass").addEventListener("change", () => { state = { ...state, offset: null, taps: [], moves: [] }; restore(); render(); });
+$("speed").addEventListener("change", () => { v.playbackRate = Number($("speed").value); });
+v.addEventListener("loadedmetadata", () => { v.playbackRate = Number($("speed").value); render(); });
+$("tap").addEventListener("click", tap);
+$("undo").addEventListener("click", undo);
+$("moveToggle").addEventListener("click", toggleMove);
+$("sync").addEventListener("click", () => {
+  const val = parseTimer($("syncVal").value);
+  if (val == null) { setStatus("타이머 값을 0:12.3 같은 형식으로 적어 주세요.", true); return; }
+  if (!v.src) { setStatus("먼저 영상 파일을 고르세요.", true); return; }
+  state.offset = val - v.currentTime; persist(); render();
+  setStatus(`맞췄습니다. 영상 ${fmt(v.currentTime)} = 녹음 ${fmt(val)}`);
+});
+$("save").addEventListener("click", save);
+$("clear").addEventListener("click", () => { $("clearConfirm").hidden = false; });
+$("clearNo").addEventListener("click", () => { $("clearConfirm").hidden = true; });
+$("clearYes").addEventListener("click", () => { state = { ...state, offset: null, taps: [], moves: [] }; persist(); render(); $("clearConfirm").hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
+  if (e.code === "Space") { e.preventDefault(); tap(); }
+  else if (e.code === "Backspace") { e.preventDefault(); undo(); }
+  else if (e.code === "KeyM") toggleMove();
+});
+v.addEventListener("timeupdate", render);
+setInterval(() => { if (!v.paused) render(); }, 250);
+render();
+window.__count = { parseTimer, minutes, csv, get state() { return state; }, set state(s) { state = s; } };
+</script>
+</body>
+</html>
